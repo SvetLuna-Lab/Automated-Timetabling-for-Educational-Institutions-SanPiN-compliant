@@ -1,0 +1,17 @@
+# data/classes.yaml
+classes:
+  - id: "5A"
+    grade: 5
+    size: 25
+
+  - id: "5B"
+    grade: 5
+    size: 24
+
+  - id: "6A"
+    grade: 6
+    size: 26
+
+  - id: "7A"
+    grade: 7
+    size: 23
