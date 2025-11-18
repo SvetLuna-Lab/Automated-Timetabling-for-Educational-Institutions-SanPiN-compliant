@@ -1,16 +1,12 @@
 # src/solvers/ortools_solver.py
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Any
 
 import yaml
 
-try:
-    from ortools.sat.python import cp_model
-except ImportError:
-    cp_model = None  # Чтобы файл импортировался даже без ortools
 
-
-def load_data(data_dir: Path) -> Dict:
+def load_data(data_dir: Path) -> Dict[str, Any]:
+    """Загрузка всех YAML-данных из папки data/."""
     def load_yaml(name: str):
         with (data_dir / name).open(encoding="utf-8") as f:
             return yaml.safe_load(f)
@@ -30,103 +26,160 @@ def load_data(data_dir: Path) -> Dict:
     }
 
 
-def generate_timetable(data_dir: Path) -> List[Dict]:
+def _build_weekly_plan_for_class(class_obj: Dict[str, Any],
+                                 subjects: List[Dict[str, Any]]) -> Dict[str, int]:
     """
-    Главная функция: на вход — папка с YAML, на выход — список строк расписания.
+    Строим недельный план для конкретного класса:
+    subject_id -> кол-во уроков в неделю.
+    Используем поле weekly_hours_by_grade в subjects.yaml.
+    """
+    grade_str = str(class_obj["grade"])
+    weekly_plan: Dict[str, int] = {}
 
-    Пока это учебный каркас:
-    - загружаем данные;
-    - если ortools не установлен, возвращаем пустое расписание;
-    - в дальнейшем здесь будет построение модели CP-SAT.
+    for subj in subjects:
+        subj_id = subj["id"]
+        weekly_by_grade = subj.get("weekly_hours_by_grade", {})
+        if grade_str in weekly_by_grade:
+            weekly_plan[subj_id] = weekly_by_grade[grade_str]
+
+    return weekly_plan
+
+
+def _build_subject_difficulty(subjects: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Словарь: subject_id -> difficulty_points."""
+    return {
+        subj["id"]: int(subj.get("difficulty_points", 1))
+        for subj in subjects
+    }
+
+
+def _greedy_generate_for_class(
+    class_obj: Dict[str, Any],
+    subjects: List[Dict[str, Any]],
+    sanpin: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Простейший жадный генератор расписания для одного класса.
+
+    Идея:
+    - есть недельный план (сколько уроков каждого предмета нужно);
+    - есть лимит уроков и лимит баллов в день;
+    - есть профиль "нагруженности" дней (target_load_profile);
+    - мы идём по дням в порядке убывания коэффициента профиля и
+      на каждый день пытаемся набрать максимум предметов, не переламывая лимиты.
+    """
+
+    # Базовые параметры
+    grade_str = str(class_obj["grade"])
+    max_lessons_by_grade = sanpin["max_lessons_per_day_by_grade"]
+    max_points_by_grade = sanpin["max_points_per_day_by_grade"]
+    slots_per_day = int(sanpin["slots_per_day"])
+
+    max_lessons_per_day = int(max_lessons_by_grade.get(grade_str, slots_per_day))
+    max_points_per_day = int(max_points_by_grade.get(grade_str, 20))
+
+    target_profile = sanpin.get("target_load_profile", {})
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+    # Упорядочим дни недели по убыванию желательной нагрузки (двугорбый профиль)
+    def profile_value(day: str) -> float:
+        return float(target_profile.get(day, 1.0))
+
+    day_order = sorted(days, key=profile_value, reverse=True)
+
+    # Недельный план и трудности
+    weekly_plan = _build_weekly_plan_for_class(class_obj, subjects)
+    difficulty = _build_subject_difficulty(subjects)
+
+    # Сколько уроков осталось поставить по каждому предмету
+    remaining = dict(weekly_plan)
+
+    timetable_rows: List[Dict[str, Any]] = []
+
+    # Чтобы не зациклиться, просто один проход по дням и слотам
+    for day in day_order:
+        lessons_planned = 0
+        points_today = 0
+        last_subject_id = None
+
+        for slot in range(1, slots_per_day + 1):
+            if lessons_planned >= max_lessons_per_day:
+                break  # достигли лимита по урокам
+
+            # Кандидаты: предметы, у которых остались часы
+            # Отсортируем по трудности (от тяжёлых к лёгким), затем по оставшимся часам
+            candidates = [
+                (subj_id, remaining[subj_id])
+                for subj_id in remaining
+                if remaining[subj_id] > 0
+            ]
+            if not candidates:
+                break  # всё уже расписали для этого класса
+
+            candidates.sort(
+                key=lambda x: (difficulty.get(x[0], 1), x[1]),
+                reverse=True,
+            )
+
+            chosen_subject_id = None
+
+            # Попробуем выбрать предмет, который влезет по баллам
+            for subj_id, _rem in candidates:
+                # избегаем ситуации "тот же предмет подряд", если есть альтернатива
+                if subj_id == last_subject_id and len(candidates) > 1:
+                    continue
+
+                subj_points = difficulty.get(subj_id, 1)
+                if points_today + subj_points <= max_points_per_day:
+                    chosen_subject_id = subj_id
+                    break
+
+            # Если вообще ничего не влезает по баллам — день "закрываем"
+            if chosen_subject_id is None:
+                break
+
+            # Фиксируем выбор
+            remaining[chosen_subject_id] -= 1
+            lessons_planned += 1
+            points_today += difficulty.get(chosen_subject_id, 1)
+            last_subject_id = chosen_subject_id
+
+            timetable_rows.append(
+                {
+                    "class_id": class_obj["id"],
+                    "day": day,
+                    "slot": slot,
+                    "subject_id": chosen_subject_id,
+                    "room_id": "",      # распределение кабинетов позже
+                    "teacher_id": "",   # распределение учителей позже
+                }
+            )
+
+    return timetable_rows
+
+
+def generate_timetable(data_dir: Path) -> List[Dict[str, Any]]:
+    """
+    Главная функция для cli.py:
+    - загружает YAML-данные;
+    - для каждого класса генерирует расписание простым жадным алгоритмом;
+    - возвращает список строк расписания (class_id, day, slot, subject_id, ...).
+
+    Это учебный прототип:
+    - соблюдаются суточные лимиты по баллам и числу уроков;
+    - тяжёлые предметы стараемся поставить в более нагруженные дни;
+    - кабинеты и учителя пока не распределяются.
     """
     data = load_data(data_dir)
 
-    if cp_model is None:
-        # Заглушка: можно вывести предупреждение или сгенерировать простейшее фиктивное расписание.
-        print("WARNING: ortools не установлен. Возвращаю пустое расписание.")
-        return []
-
-    model = cp_model.CpModel()
-
-    classes = data["classes"]
     subjects = data["subjects"]
-    rooms = data["rooms"]
+    classes = data["classes"]
     sanpin = data["sanpin"]
 
-    # Пример: задаём базовые параметры
-    days = ["monday", "tuesday", "wednesday", "thursday", "friday"]
-    slots_per_day = sanpin["slots_per_day"]
+    timetable: List[Dict[str, Any]] = []
 
-    # Индексируем сущности для удобства
-    class_ids = [c["id"] for c in classes]
-    subject_ids = [s["id"] for s in subjects]
-    room_ids = [r["id"] for r in rooms]
-
-    # TODO: добавить учителей и связь предметов с учителями
-
-    # ----- Переменные -----
-    # x[(class_id, day, slot, subject_id)] = 0/1 — стоит ли предмет в этом слоте
-    x = {}
-    for c in class_ids:
-        for d in days:
-            for p in range(1, slots_per_day + 1):
-                for s in subject_ids:
-                    x[(c, d, p, s)] = model.NewBoolVar(f"x_{c}_{d}_{p}_{s}")
-
-    # Здесь же будут переменные для кабинетов, учителей и т.д.
-
-    # ----- Ограничения (каркас, без реализации) -----
-
-    # 1) В каждом слоте для класса — не более одного предмета
-    # for c in class_ids:
-    #     for d in days:
-    #         for p in range(1, slots_per_day + 1):
-    #             model.Add(
-    #                 sum(x[(c, d, p, s)] for s in subject_ids) <= 1
-    #             )
-
-    # 2) Выполнение недельного плана по предметам
-    # (нужно рассчитать, сколько уроков в неделю у класса по каждому предмету
-    #  на основе subjects.yaml)
-
-    # 3) Ограничение по баллам в день
-    # (сумма x * difficulty_points <= max_points_per_day_by_grade)
-
-    # 4) Ограничения по тяжёлым предметам и положениям уроков
-
-    # 5) Ограничения по кабинетам и учителям — позже
-
-    # ----- Целевая функция -----
-    # Для старта можно задать простую цель: минимизировать количество занятых
-    # "крайних" уроков тяжёлыми предметами, и/или равномерно распределить нагрузку.
-
-    # objective_terms = []
-    # model.Minimize(sum(objective_terms))
-
-    # ----- Решение -----
-    solver = cp_model.CpSolver()
-    status = solver.Solve(model)
-
-    timetable: List[Dict] = []
-
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for c in class_ids:
-            for d in days:
-                for p in range(1, slots_per_day + 1):
-                    for s in subject_ids:
-                        if solver.Value(x[(c, d, p, s)]) == 1:
-                            # Пока без кабинета и учителя — только базовая структура
-                            timetable.append(
-                                {
-                                    "class_id": c,
-                                    "day": d,
-                                    "slot": p,
-                                    "subject_id": s,
-                                    "room_id": "",      # TODO
-                                    "teacher_id": "",   # TODO
-                                }
-                            )
-    else:
-        print("Не удалось найти допустимое расписание.")
+    for class_obj in classes:
+        class_rows = _greedy_generate_for_class(class_obj, subjects, sanpin)
+        timetable.extend(class_rows)
 
     return timetable
