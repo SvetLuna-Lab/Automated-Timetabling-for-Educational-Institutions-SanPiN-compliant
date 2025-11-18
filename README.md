@@ -1,5 +1,27 @@
 # Проект «SANPIN-Schedule: Автоматизированное составление школьного расписания»
 
+## Overview (English)
+
+This repository contains a small **school timetabling engine** in Python.
+
+Core idea:
+
+- each subject has a **workload weight** (difficulty points per lesson);
+- for each grade we specify:
+  - the **maximum number of lessons per day**;
+  - the **maximum daily workload in points**;
+- the algorithm generates a weekly timetable for several classes so that:
+  - the weekly curriculum is satisfied (required lessons per subject);
+  - no day exceeds the allowed workload or lesson count;
+  - "heavier" subjects are placed on peak-performance days (e.g. Tuesday/Wednesday);
+  - Monday and Friday stay lighter.
+
+The current dataset uses **Russian sanitary workload norms (SanPiN)** as an example,
+but the engine itself is generic: all limits are configured via YAML and can be
+adapted to any country’s school regulations.
+
+
+
 ## 1. Введение
 
 Учебное расписание в школе должно соответствовать не только учебному плану,
@@ -84,6 +106,7 @@ school-timetabling-sanpin/
 ├─ timetable.csv
 ├─ timetable.md
 ├─ .gitignore
+├─ .editorconfig
 └─ README.md
 
 
@@ -480,4 +503,18 @@ Python подходит не только для учебных задач, но
 
 Файлы в папке docs/ можно использовать как основу для отчёта,
 курсовой или презентации по теме «Автоматизация составления школьного расписания».
+
+
+LICENSE:
+
+MIT License
+
+Copyright (c) 2025 Svetlana Romanova
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights  
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell  
+copies of the Software, and to permit persons to whom the Software is  
+furnished to do so, subject to the following conditions:
 
