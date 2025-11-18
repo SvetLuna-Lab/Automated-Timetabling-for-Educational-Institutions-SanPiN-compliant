@@ -15,7 +15,7 @@ dist/
 *.egg-info/
 *.egg
 
-# IDE / Editor
+# IDE / Editor configs
 .vscode/
 .idea/
 *.swp
@@ -32,10 +32,9 @@ Thumbs.db
 .pytest_cache/
 .mypy_cache/
 
-# Local environment
+# Local environment variables
 .env
 .env.*
 
-# Project-specific generated files
+# Project-specific generated artifacts
 timetable.csv
-timetable.md
