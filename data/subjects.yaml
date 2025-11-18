@@ -1,0 +1,58 @@
+# Упрощённый пример для 5–7 классов.
+# data/subjects.yaml
+subjects:
+  - id: math
+    name: "Математика"
+    difficulty_points: 4
+    weekly_hours_by_grade:
+      "5": 5
+      "6": 5
+      "7": 5
+
+  - id: russian
+    name: "Русский язык"
+    difficulty_points: 3
+    weekly_hours_by_grade:
+      "5": 4
+      "6": 4
+      "7": 3
+
+  - id: literature
+    name: "Литература"
+    difficulty_points: 2
+    weekly_hours_by_grade:
+      "5": 2
+      "6": 2
+      "7": 2
+
+  - id: history
+    name: "История"
+    difficulty_points: 3
+    weekly_hours_by_grade:
+      "5": 2
+      "6": 2
+      "7": 2
+
+  - id: biology
+    name: "Биология"
+    difficulty_points: 3
+    weekly_hours_by_grade:
+      "5": 1
+      "6": 2
+      "7": 2
+
+  - id: pe
+    name: "Физкультура"
+    difficulty_points: 1
+    weekly_hours_by_grade:
+      "5": 3
+      "6": 3
+      "7": 3
+
+  - id: foreign
+    name: "Иностранный язык"
+    difficulty_points: 3
+    weekly_hours_by_grade:
+      "5": 3
+      "6": 3
+      "7": 3
