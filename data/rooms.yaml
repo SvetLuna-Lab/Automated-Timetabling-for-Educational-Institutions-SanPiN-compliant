@@ -1,0 +1,26 @@
+# data/rooms.yaml
+rooms:
+  - id: "101"
+    name: "Кабинет 101"
+    capacity: 28
+    type: "общий"
+
+  - id: "102"
+    name: "Кабинет 102"
+    capacity: 25
+    type: "общий"
+
+  - id: "201"
+    name: "Физика"
+    capacity: 24
+    type: "физика"
+
+  - id: "202"
+    name: "Биология"
+    capacity: 24
+    type: "биология"
+
+  - id: "gym"
+    name: "Спортзал"
+    capacity: 30
+    type: "спорт"
