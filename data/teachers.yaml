@@ -1,0 +1,37 @@
+# data/teachers.yaml
+teachers:
+  - id: "t_math_1"
+    name: "Иванова И.И."
+    subjects: ["math"]
+    max_lessons_per_day: 5
+    max_lessons_per_week: 25
+
+  - id: "t_rus_1"
+    name: "Петрова П.П."
+    subjects: ["russian", "literature"]
+    max_lessons_per_day: 5
+    max_lessons_per_week: 25
+
+  - id: "t_hist_1"
+    name: "Сидоров С.С."
+    subjects: ["history"]
+    max_lessons_per_day: 4
+    max_lessons_per_week: 20
+
+  - id: "t_bio_1"
+    name: "Кузнецова К.К."
+    subjects: ["biology"]
+    max_lessons_per_day: 4
+    max_lessons_per_week: 20
+
+  - id: "t_pe_1"
+    name: "Федоров Ф.Ф."
+    subjects: ["pe"]
+    max_lessons_per_day: 4
+    max_lessons_per_week: 18
+
+  - id: "t_for_1"
+    name: "Антонова А.А."
+    subjects: ["foreign"]
+    max_lessons_per_day: 5
+    max_lessons_per_week: 22
