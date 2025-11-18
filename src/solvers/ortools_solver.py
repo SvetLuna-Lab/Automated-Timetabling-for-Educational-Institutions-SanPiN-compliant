@@ -2,35 +2,17 @@
 from pathlib import Path
 from typing import List, Dict, Any
 
-import yaml
+from ..io.loader import load_all_data
 
 
-def load_data(data_dir: Path) -> Dict[str, Any]:
-    """Загрузка всех YAML-данных из папки data/."""
-    def load_yaml(name: str):
-        with (data_dir / name).open(encoding="utf-8") as f:
-            return yaml.safe_load(f)
-
-    subjects = load_yaml("subjects.yaml")["subjects"]
-    classes = load_yaml("classes.yaml")["classes"]
-    rooms = load_yaml("rooms.yaml")["rooms"]
-    teachers = load_yaml("teachers.yaml")["teachers"]
-    sanpin = load_yaml("sanpin_limits.yaml")
-
-    return {
-        "subjects": subjects,
-        "classes": classes,
-        "rooms": rooms,
-        "teachers": teachers,
-        "sanpin": sanpin,
-    }
-
-
-def _build_weekly_plan_for_class(class_obj: Dict[str, Any],
-                                 subjects: List[Dict[str, Any]]) -> Dict[str, int]:
+def _build_weekly_plan_for_class(
+    class_obj: Dict[str, Any],
+    subjects: List[Dict[str, Any]],
+) -> Dict[str, int]:
     """
     Строим недельный план для конкретного класса:
     subject_id -> кол-во уроков в неделю.
+
     Используем поле weekly_hours_by_grade в subjects.yaml.
     """
     grade_str = str(class_obj["grade"])
@@ -45,7 +27,9 @@ def _build_weekly_plan_for_class(class_obj: Dict[str, Any],
     return weekly_plan
 
 
-def _build_subject_difficulty(subjects: List[Dict[str, Any]]) -> Dict[str, int]:
+def _build_subject_difficulty(
+    subjects: List[Dict[str, Any]]
+) -> Dict[str, int]:
     """Словарь: subject_id -> difficulty_points."""
     return {
         subj["id"]: int(subj.get("difficulty_points", 1))
@@ -65,8 +49,8 @@ def _greedy_generate_for_class(
     - есть недельный план (сколько уроков каждого предмета нужно);
     - есть лимит уроков и лимит баллов в день;
     - есть профиль "нагруженности" дней (target_load_profile);
-    - мы идём по дням в порядке убывания коэффициента профиля и
-      на каждый день пытаемся набрать максимум предметов, не переламывая лимиты.
+    - идём по дням в порядке убывания коэффициента профиля и
+      на каждый день набираем максимум предметов, не переламывая лимиты.
     """
 
     # Базовые параметры
@@ -96,7 +80,7 @@ def _greedy_generate_for_class(
 
     timetable_rows: List[Dict[str, Any]] = []
 
-    # Чтобы не зациклиться, просто один проход по дням и слотам
+    # Один проход по дням и слотам
     for day in day_order:
         lessons_planned = 0
         points_today = 0
@@ -104,18 +88,20 @@ def _greedy_generate_for_class(
 
         for slot in range(1, slots_per_day + 1):
             if lessons_planned >= max_lessons_per_day:
-                break  # достигли лимита по урокам
+                # достигли лимита по урокам на день
+                break
 
             # Кандидаты: предметы, у которых остались часы
-            # Отсортируем по трудности (от тяжёлых к лёгким), затем по оставшимся часам
             candidates = [
                 (subj_id, remaining[subj_id])
                 for subj_id in remaining
                 if remaining[subj_id] > 0
             ]
             if not candidates:
-                break  # всё уже расписали для этого класса
+                # всё уже расписали для этого класса
+                break
 
+            # От тяжёлых к лёгким, затем по оставшимся часам
             candidates.sort(
                 key=lambda x: (difficulty.get(x[0], 1), x[1]),
                 reverse=True,
@@ -123,9 +109,9 @@ def _greedy_generate_for_class(
 
             chosen_subject_id = None
 
-            # Попробуем выбрать предмет, который влезет по баллам
+            # Выбираем предмет, который влезет по баллам
             for subj_id, _rem in candidates:
-                # избегаем ситуации "тот же предмет подряд", если есть альтернатива
+                # избегаем "тот же предмет подряд", если есть альтернатива
                 if subj_id == last_subject_id and len(candidates) > 1:
                     continue
 
@@ -134,7 +120,7 @@ def _greedy_generate_for_class(
                     chosen_subject_id = subj_id
                     break
 
-            # Если вообще ничего не влезает по баллам — день "закрываем"
+            # Если ничего не влезает по баллам — день "закрываем"
             if chosen_subject_id is None:
                 break
 
@@ -161,16 +147,16 @@ def _greedy_generate_for_class(
 def generate_timetable(data_dir: Path) -> List[Dict[str, Any]]:
     """
     Главная функция для cli.py:
-    - загружает YAML-данные;
-    - для каждого класса генерирует расписание простым жадным алгоритмом;
+    - загружает YAML-данные через io.loader.load_all_data;
+    - для каждого класса генерирует расписание жадным алгоритмом;
     - возвращает список строк расписания (class_id, day, slot, subject_id, ...).
 
     Это учебный прототип:
     - соблюдаются суточные лимиты по баллам и числу уроков;
-    - тяжёлые предметы стараемся поставить в более нагруженные дни;
+    - тяжёлые предметы стараемся ставить в более нагруженные дни;
     - кабинеты и учителя пока не распределяются.
     """
-    data = load_data(data_dir)
+    data = load_all_data(data_dir)
 
     subjects = data["subjects"]
     classes = data["classes"]
@@ -183,3 +169,5 @@ def generate_timetable(data_dir: Path) -> List[Dict[str, Any]]:
         timetable.extend(class_rows)
 
     return timetable
+
+
