@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Dev-tools
+black>=24.0.0
+isort>=5.12.0
