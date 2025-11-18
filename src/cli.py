@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 
 from solvers.ortools_solver import generate_timetable
+from io.exporter import export_timetable_csv  # новый импорт
 
 
 def main():
@@ -28,18 +29,9 @@ def main():
 
     timetable = generate_timetable(data_dir)
 
-    # Простейший экспорт в CSV
-    # Ожидаем, что timetable — это список словарей:
-    # {"class_id": ..., "day": ..., "slot": ..., "subject_id": ..., "room_id": ..., "teacher_id": ...}
-    import csv
-
-    fieldnames = ["class_id", "day", "slot", "subject_id", "room_id", "teacher_id"]
-    with output_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=";")
-        writer.writeheader()
-        for row in timetable:
-            writer.writerow(row)
+    export_timetable_csv(timetable, output_path)
 
 
 if __name__ == "__main__":
     main()
+
