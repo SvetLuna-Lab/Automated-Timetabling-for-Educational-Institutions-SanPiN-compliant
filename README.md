@@ -80,6 +80,7 @@ school-timetabling-sanpin/
 │  ├─ rooms.yaml           # кабинеты, вместимость, профиль
 │  ├─ teachers.yaml        # учителя и их предметы
 │  └─ sanpin_limits.yaml   # лимиты по урокам и баллам, недельный профиль нагрузки
+├─ app.py                  # простой API-сервис для генерации школьного расписания
 ├─ src/
 │  ├─ __init__.py
 │  ├─ models/
@@ -96,9 +97,13 @@ school-timetabling-sanpin/
 │  └─ 01_check_daily_load.py   # проверка суточной нагрузки по баллам
 ├─ tests/
 │  └─ test_daily_load_limits.py  # pytest: контроль лимитов по урокам и баллам
+│  └─ test_teacher_constraints.py         # тесты ограничений по учителям
+│  └─ test_class_sanpin_constraints.py    # тест соблюдения СанПиН по баллам для классов
+│  └─ test_api_smoke.py                   # простейшие smoke-тесты для HTTP-API
 ├─ docs/
 │  ├─ Описание_проекта.md            # (этот файл) техническое описание
 │  └─ Краткое_описание_для_школы.md  # краткое объяснение для учителя/жюри
+│  └─ Pipeline.md
 ├─ scripts/
 │  └─ class_load_report.py
 │  └─ teacher_load_report.py
@@ -414,7 +419,8 @@ python tools/generate_timetable_md.py
 
 выводит отчёт по каждому классу и дню.
 
-Автотест tests/test_daily_load_limits.py (pytest):
+
+- Автотест `tests/test_daily_load_limits.py (pytest)`:
 
 вызывает generate_timetable(...) напрямую;
 
@@ -424,6 +430,28 @@ python tools/generate_timetable_md.py
 
 Таким образом, проект иллюстрирует использование автоматических тестов
 для проверки школьной модели расписания.
+
+
+В проекте есть интеграционные тесты, которые проверяют ключевые ограничения:
+
+- `tests/test_teacher_constraints.py`  
+  Проверяет, что:
+  - учитель не стоит в двух классах в один и тот же день/урок;
+  - недельная и дневная нагрузка не превышает лимиты `max_lessons_per_week` и `max_lessons_per_day`.
+
+- `tests/test_class_sanpin_constraints.py`  
+  Проверяет, что для каждого класса суточная сумма `difficulty_points`
+  не превышает `max_points_per_day_by_grade` из `sanpin_limits.yaml`.
+
+- `tests/test_api_smoke.py`  
+  Smoke-тесты для HTTP-сервиса:
+  - `GET /health` возвращает `{"status": "ok"}`;
+  - `GET /generate-timetable` возвращает список строк расписания с ожидаемыми полями.
+
+Запуск тестов:
+
+```bash
+pytest -vv
 
 
 
@@ -618,7 +646,35 @@ python tools/generate_timetable_md.py
 
 
 
-## 15. **Заключение**
+## 15. **Схема пайплайна**
+
+Общий конвейер «YAML → решатель → расписание → отчёты» описан в:
+
+docs/Pipeline.md
+
+Там показано, как данные проходят через проект:
+от data/*.yaml до timetable.csv, timetable.md и отчётов по классам/учителям.
+
+
+## 16. **HTTP-API (школьный сервер)**
+
+Минимальный API-сервис на FastAPI реализован в файле:
+
+api/app.py
+
+Эндпоинты:
+
+GET /health — проверка доступности сервиса.
+
+GET /generate-timetable — вызов планировщика и получение полного расписания в формате JSON.
+
+Запуск сервера (локально):
+
+uvicorn api.app:app --reload
+
+
+
+## 17. **Заключение**
 
 Проект SANPIN-Schedule демонстрирует, что:
 
@@ -635,7 +691,7 @@ Python подходит не только для учебных задач, но
 
 
 
-## 16. **MIT License**
+## 18. **MIT License**
 
 Copyright (c) 2025 Svetlana Romanova
 
