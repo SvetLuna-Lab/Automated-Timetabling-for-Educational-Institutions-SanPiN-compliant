@@ -1,6 +1,7 @@
 # src/solvers/ortools_solver.py
 from pathlib import Path
 from typing import List, Dict, Any
+from collections import defaultdict
 
 from ..io.loader import load_all_data
 
@@ -35,6 +36,115 @@ def _build_subject_difficulty(
         subj["id"]: int(subj.get("difficulty_points", 1))
         for subj in subjects
     }
+
+
+def _build_teacher_state(teachers: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Подготовка структуры состояния для каждого учителя.
+
+    На выходе:
+    teacher_id -> {
+        "subjects": set([...]),
+        "max_per_week": int,
+        "max_per_day": int,
+        "week_load": int,
+        "day_load": {day: int, ...}
+    }
+    """
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+    state: Dict[str, Dict[str, Any]] = {}
+
+    for t in teachers:
+        tid = t["id"]
+        subjects = set(t.get("subjects", []))
+        max_per_week = int(t.get("max_lessons_per_week", 999))
+        max_per_day = int(t.get("max_lessons_per_day", 8))
+
+        state[tid] = {
+            "subjects": subjects,
+            "max_per_week": max_per_week,
+            "max_per_day": max_per_day,
+            "week_load": 0,
+            "day_load": {d: 0 for d in days},
+        }
+
+    return state
+
+
+def _assign_teachers_greedy(
+    timetable_rows: List[Dict[str, Any]],
+    teachers: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Жадное распределение уроков по учителям.
+
+    На входе:
+    - список строк расписания по классам (class_id, day, slot, subject_id, room_id, teacher_id="");
+    - список учителей с предметами и лимитами.
+
+    Логика:
+    - для каждого урока ищем учителей, которые:
+        * ведут этот предмет (subject_id ∈ subjects),
+        * не заняты в этот день/урок,
+        * не превысили max_lessons_per_day и max_lessons_per_week;
+    - из подходящих выбираем того, у кого наименьшая текущая недельная нагрузка
+      (чтобы нагрузка по людям была более ровной);
+    - если никого не нашли — оставляем teacher_id = "" (показывает дефицит ставок).
+    """
+    # Состояние по учителям
+    teacher_state = _build_teacher_state(teachers)
+
+    # Занятость: (teacher_id, day, slot) -> bool
+    busy: Dict[tuple, bool] = defaultdict(bool)
+
+    # Для стабильности отсортируем уроки:
+    # сначала по дню, потом по номеру слота, потом по предмету и классу.
+    def sort_key(row: Dict[str, Any]):
+        return (row["day"], row["slot"], row["subject_id"], row["class_id"])
+
+    sorted_rows = sorted(timetable_rows, key=sort_key)
+
+    for row in sorted_rows:
+        day = row["day"]
+        slot = row["slot"]
+        subject_id = row["subject_id"]
+
+        candidates = []
+        for t in teachers:
+            tid = t["id"]
+            st = teacher_state[tid]
+
+            # учитель не ведёт этот предмет
+            if subject_id not in st["subjects"]:
+                continue
+
+            # занят в этом слоте
+            if busy[(tid, day, slot)]:
+                continue
+
+            # превышен недельный или дневной лимит
+            if st["week_load"] >= st["max_per_week"]:
+                continue
+            if st["day_load"][day] >= st["max_per_day"]:
+                continue
+
+            candidates.append(tid)
+
+        if not candidates:
+            # никого не удалось поставить — фиксируем пустой teacher_id
+            row["teacher_id"] = ""
+            continue
+
+        # выбираем учителя с минимальной недельной нагрузкой
+        best_tid = min(candidates, key=lambda tid: teacher_state[tid]["week_load"])
+
+        row["teacher_id"] = best_tid
+        teacher_state[best_tid]["week_load"] += 1
+        teacher_state[best_tid]["day_load"][day] += 1
+        busy[(best_tid, day, slot)] = True
+
+    return timetable_rows
 
 
 def _greedy_generate_for_class(
@@ -137,7 +247,7 @@ def _greedy_generate_for_class(
                     "slot": slot,
                     "subject_id": chosen_subject_id,
                     "room_id": "",      # распределение кабинетов позже
-                    "teacher_id": "",   # распределение учителей позже
+                    "teacher_id": "",   # будет заполнен на втором шаге
                 }
             )
 
@@ -148,18 +258,21 @@ def generate_timetable(data_dir: Path) -> List[Dict[str, Any]]:
     """
     Главная функция для cli.py:
     - загружает YAML-данные через io.loader.load_all_data;
-    - для каждого класса генерирует расписание жадным алгоритмом;
-    - возвращает список строк расписания (class_id, day, slot, subject_id, ...).
+    - для каждого класса генерирует расписание жадным алгоритмом по СанПиН;
+    - затем жадно распределяет уроки по учителям;
+    - возвращает список строк расписания (class_id, day, slot, subject_id, room_id, teacher_id, ...).
 
     Это учебный прототип:
-    - соблюдаются суточные лимиты по баллам и числу уроков;
+    - соблюдаются суточные лимиты по баллам и числу уроков для класса;
     - тяжёлые предметы стараемся ставить в более нагруженные дни;
-    - кабинеты и учителя пока не распределяются.
+    - кабинеты пока не распределяются;
+    - учителя назначаются с учётом их недельной и дневной нагрузки.
     """
     data = load_all_data(data_dir)
 
     subjects = data["subjects"]
     classes = data["classes"]
+    teachers = data["teachers"]
     sanpin = data["sanpin"]
 
     timetable: List[Dict[str, Any]] = []
@@ -168,6 +281,8 @@ def generate_timetable(data_dir: Path) -> List[Dict[str, Any]]:
         class_rows = _greedy_generate_for_class(class_obj, subjects, sanpin)
         timetable.extend(class_rows)
 
-    return timetable
+    # Второй шаг: распределение уроков по учителям
+    timetable_with_teachers = _assign_teachers_greedy(timetable, teachers)
 
+    return timetable_with_teachers
 
