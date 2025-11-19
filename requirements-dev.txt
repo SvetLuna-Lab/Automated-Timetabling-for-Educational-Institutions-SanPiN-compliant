@@ -10,3 +10,6 @@ mypy>=1.10.0
 # Работа с ноутбуками
 jupyterlab>=4.0.0
 ipykernel>=6.0.0
+
+pytest
+pytest-cov
