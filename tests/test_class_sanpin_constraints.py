@@ -11,8 +11,6 @@ from pathlib import Path
 from collections import defaultdict
 from typing import Dict, Any
 
-import yaml
-
 from src.solvers.ortools_solver import generate_timetable
 from src.io.loader import load_all_data
 
