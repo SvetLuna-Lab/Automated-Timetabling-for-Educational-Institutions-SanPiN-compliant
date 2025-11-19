@@ -1,6 +1,4 @@
-pyyaml>=6.0
-pytest>=8.0
-
-# OR-Tools пока опционален: текущий жадный решатель работает без него.
-# Если будешь подключать CP-SAT/ILP, раскомментируй строчку ниже.
-# ortools>=9.9.0
+pyyaml
+fastapi
+uvicorn[standard]
+ortools
