@@ -2,15 +2,14 @@
 """
 Тесты ограничений по учителям:
 
-- учитель не может вести два урока одновременно (один и тот же день+слот);
+- учитель не может вести два урока одновременно
+  (один и тот же день + слот);
 - фактическая недельная нагрузка не превышает max_lessons_per_week;
 - фактическая нагрузка по дню не превышает max_lessons_per_day.
 """
 
 from pathlib import Path
 from collections import defaultdict
-
-import yaml
 
 from src.solvers.ortools_solver import generate_timetable
 from src.io.loader import load_all_data
@@ -26,7 +25,6 @@ def test_teacher_not_double_booked_and_respects_limits():
     # Генерируем расписание
     timetable_rows = generate_timetable(data_dir)
 
-    # Структуры для проверки
     # (teacher_id, day, slot) -> сколько раз учитель стоит в этом слоте
     slot_usage = defaultdict(int)
 
@@ -40,11 +38,11 @@ def test_teacher_not_double_booked_and_respects_limits():
         slot = int(row.get("slot", 0))
 
         if not teacher_id:
-            # Пустой teacher_id означает дефицит учителей — это не ошибка,
-            # но такие слоты пропускаем в проверке ограничений.
+            # Пустой teacher_id означает дефицит учителей — это не ошибка алгоритма
+            # распределения нагрузок, такие слоты пропускаем в проверке ограничений.
             continue
 
-        # Проверяем уникальность слота для учителя
+        # Учитель не должен быть в двух местах в один и тот же слот
         key = (teacher_id, day, slot)
         slot_usage[key] += 1
         assert (
@@ -55,7 +53,7 @@ def test_teacher_not_double_booked_and_respects_limits():
         week_load[teacher_id] += 1
         day_load[teacher_id][day] += 1
 
-    # Проверяем, что никто не превысил указанные лимиты
+    # Проверяем лимиты нагрузки
     for teacher_id, info in teachers.items():
         max_per_week = int(info.get("max_lessons_per_week", 999))
         max_per_day = int(info.get("max_lessons_per_day", 99))
